@@ -15,6 +15,20 @@
             Retirar: <input type="number" name="subtrac">
             <button type="submit">Confirmar</button>
         </form>
-        <a href="/ruleta">volver a ruleta</a> 
+        
+        <h2>Historial de transacciones</h2>
+
+        {{#if historial.length}}
+             <ul>
+                {{#each historial}}
+                   <li>
+                      {{tipo}} de ${{monto}} — {{fecha}}
+                   </li>
+                {{/each}}
+             </ul>
+        {{else}}
+           <p>No tienes transacciones aún.</p>
+         {{/if}}
+        <a href="/ruleta">Volver a ruleta</a>
     </body>
 </html>
