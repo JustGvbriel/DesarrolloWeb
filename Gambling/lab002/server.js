@@ -122,57 +122,108 @@ app.get('/ruleta', async(req, res)=>{
     }
 })
 
-//wallet
-app.get('/wallet', async(req, res)=>{
-    const saldo = req.cookies.saldo ?? '0';
-    
-    res.render('wallet', {saldo:saldo})
-})
-
-app.post('/wallet', async(req,res)=>{
-  try{
+//wallet  muestra saldo e historial
+app.get('/wallet', async (req, res) => {
+  try {
     const ID = req.cookies.ID;
-    const add = req.body.add;
-    const subtrac = req.body.subtrac;
-    if(add){ //añadir fondos
-        const transaccion={
-          tipo: 'deposito',
-          monto: add
-        };
-        const Update = await Usuario.findByIdAndUpdate(
-          ID,
-            {
-              $push: {historial:transaccion},
-              $inc: {balance:add}
-            },
-            {new: true}
-        )
-        res.cookie('saldo', Update.balance.toString());
-        res.redirect('/wallet');
-    };
-    if(subtrac){ //retirar fondos
-      const transaccion={
-          tipo: 'retiro',
-          monto: subtrac
-        }
+    const usuario = await Usuario.findById(ID);
+    if (!usuario) {
+      return res.status(400).send('Usuario no encontrado');
+    }
 
-        const Update = await Usuario.findByIdAndUpdate(
-          ID,
-            {
-              $push: {historial:transaccion},
-              $inc: {balance:-subtrac}
-            },
-            {new: true}
-        )
-        res.cookie('saldo', Update.balance.toString());
-        res.redirect('/wallet');
-    };
+    // Ordenar historial: transacciones más recientes primero
+    const historialOrdenado = [...usuario.historial].reverse();
+
+    res.render('wallet', {
+      saldo: usuario.balance,
+      historial: historialOrdenado
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error al cargar wallet');
   }
-  catch(error){
-      console.error(error);
-      res.status(500).send('error del servidor');
+});
+
+//manejar depósitos y retiros
+app.post('/wallet', async (req, res) => {
+  try {
+    const ID = req.cookies.ID;
+    const add = Number(req.body.add);
+    const subtrac = Number(req.body.subtrac);
+
+    const usuario = await Usuario.findById(ID);
+    if (!usuario) {
+      return res.status(400).render('wallet', { saldo: 0, mensaje: 'Usuario no encontrado' });
+    }
+
+    //  Depositar dinero
+    if (add && add > 0) {
+      const transaccion = { tipo: 'deposito', monto: add };
+
+      const update = await Usuario.findByIdAndUpdate(
+        ID,
+        {
+          $push: { historial: transaccion },
+          $inc: { balance: add }
+        },
+        { new: true }
+      );
+
+      res.cookie('saldo', update.balance.toString());
+
+      const historialOrdenado = [...update.historial].reverse();
+      return res.render('wallet', {
+        saldo: update.balance,
+        historial: historialOrdenado,
+        mensaje: `Se agregaron $${add}`
+      });
+    }
+
+    // Retirar dinero (verificación de saldo)
+    if (subtrac && subtrac > 0) {
+      if (usuario.balance < subtrac) {
+        const historialOrdenado = [...usuario.historial].reverse();
+        return res.render('wallet', {
+          saldo: usuario.balance,
+          historial: historialOrdenado,
+          mensaje: 'Saldo insuficiente. No puedes retirar más de lo que tienes.'
+        });
+      }
+
+      const transaccion = { tipo: 'retiro', monto: subtrac };
+
+      const update = await Usuario.findByIdAndUpdate(
+        ID,
+        {
+          $push: { historial: transaccion },
+          $inc: { balance: -subtrac }
+        },
+        { new: true }
+      );
+
+      res.cookie('saldo', update.balance.toString());
+
+      const historialOrdenado = [...update.historial].reverse();
+      return res.render('wallet', {
+        saldo: update.balance,
+        historial: historialOrdenado,
+        mensaje: `Se retiraron $${subtrac}`
+      });
+    }
+
+    // Si no se ingresó ningún valor válido
+    const historialOrdenado = [...usuario.historial].reverse();
+    res.status(400).render('wallet', {
+      saldo: usuario.balance,
+      historial: historialOrdenado,
+      mensaje: 'Ingresa un monto válido para depositar o retirar.'
+    });
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).render('wallet', { saldo: 0, mensaje: 'Error del servidor' });
   }
-})
+});
 
 //perfil
 app.get("/perfil", async(req,res)=>{
@@ -230,4 +281,5 @@ mongoose.connect(adressDB, {
 
 app.listen(port, () => {
     console.log(`Servidor de cookies listo. Visita http://localhost:${port}`);
+
 });
